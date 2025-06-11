@@ -5,6 +5,9 @@ import time
 import re
 import requests
 import PyPDF2
+import fitz  # PyMuPDF
+from PIL import Image
+import pytesseract
 import pandas as pd
 import io
 
@@ -34,11 +37,42 @@ def call_claude_api(prompt, api_key):
         st.error(f"Response: {response.text}")
         return None
 
+
+def extract_images_with_ocr(pdf_bytes, page_range):
+    """Extract images from the specified pages and run OCR on them."""
+    ocr_fragments = []
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    for page_num in page_range:
+        if page_num < len(doc):
+            page = doc[page_num]
+            for img in page.get_images(full=True):
+                xref = img[0]
+                pix = fitz.Pixmap(doc, xref)
+                if pix.n > 4:  # convert CMYK/GRAYSCALE/etc to RGB
+                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                img_bytes = pix.tobytes("png")
+                pix = None
+                img_obj = Image.open(io.BytesIO(img_bytes))
+                text = pytesseract.image_to_string(img_obj)
+                if text.strip():
+                    ocr_fragments.append(text.strip())
+    doc.close()
+    return "\n".join(ocr_fragments)
+
 def extract_text_from_pdf(pdf_file, start_page, end_page):
-    reader = PyPDF2.PdfReader(pdf_file)
+    """Extract text and OCR content from the given page range."""
+    pdf_file.seek(0)
+    pdf_bytes = pdf_file.read()
+    reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
     text = ""
     for page_num in range(start_page, min(end_page, len(reader.pages))):
-        text += reader.pages[page_num].extract_text()
+        page_text = reader.pages[page_num].extract_text()
+        if page_text:
+            text += page_text
+    ocr = extract_images_with_ocr(pdf_bytes, range(start_page, end_page))
+    if ocr:
+        text += f"\n[GRAPH]: {ocr}"
+    pdf_file.seek(0)
     return text
 
 def process_pdf_chunk(chunk_text, api_key):
