@@ -13,8 +13,12 @@ This Streamlit app processes SAT questions from a PDF file using the Claude API 
 - Python 3.7+
 - Streamlit
 - PyPDF2
+- PyMuPDF
 - pandas
+- pytesseract
 - requests
+
+`pytesseract` requires the Tesseract OCR engine to be installed on your system.
 
 ## Installation
 
