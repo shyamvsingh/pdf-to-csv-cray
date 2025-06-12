@@ -1,3 +1,4 @@
+
 import streamlit as st
 import os
 import json
@@ -12,6 +13,7 @@ import pandas as pd
 import io
 import base64
 import shutil
+
 
 # API configuration
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -34,6 +36,7 @@ def call_claude_api(prompt, api_key):
     response = requests.post(API_URL, headers=headers, json=payload)
     if response.status_code == 200:
         return response.json()['content'][0]['text']
+
     else:
         st.error(f"API call failed with status code: {response.status_code}")
         st.error(f"Response: {response.text}")
@@ -84,7 +87,9 @@ def extract_text_from_pdf(pdf_file, start_page, end_page, image_dir):
     pdf_file.seek(0)
     return text, images_info
 
+
 def process_pdf_chunk(chunk_text, api_key):
+
     prompt = f"""
     Analyze the following text extracted from an SAT question paper and format it into a structured JSON output. Extract the following details for each question:
     - Question ID (for example - 6ed4df)
@@ -119,6 +124,9 @@ def process_pdf_chunk(chunk_text, api_key):
         }}
       ]
     }}
+
+    Image OCR mapping:
+    {placeholder_info}
 
     Here's the text to process:
 
@@ -191,21 +199,25 @@ def main():
                     status_text.text(f"Processed pages {start_page+1}-{end_page}")
                 else:
                     status_text.text(f"No valid data found for pages {start_page+1}-{end_page}")
+
                 
                 progress = (end_page / total_pages)
                 progress_bar.progress(progress)
                 
                 time.sleep(2)
 
+
             if all_questions:
                 df = pd.DataFrame(all_questions)
                 df['options'] = df['options'].apply(lambda x: '; '.join([f"{opt['label']}: {opt['text']}" for opt in x]))
                 if 'images' in df.columns:
                     df['images'] = df['images'].apply(json.dumps)
+
                 
                 csv = df.to_csv(index=False)
                 csv_bytes = csv.encode()
                 
+
                 st.download_button(
                     label="Download CSV",
                     data=csv_bytes,
@@ -219,6 +231,7 @@ def main():
                 st.error("No questions were processed successfully.")
                 if cleanup_images:
                     shutil.rmtree(image_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     main()
