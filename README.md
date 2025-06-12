@@ -12,7 +12,7 @@ This Streamlit app processes SAT questions from a PDF file using the Claude API 
 
 - Python 3.7+
 - Streamlit
-- PyPDF2
+- pdfplumber
 - PyMuPDF
 - pandas
 - pytesseract

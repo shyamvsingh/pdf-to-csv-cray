@@ -4,7 +4,7 @@ import json
 import time
 import re
 import requests
-import PyPDF2
+import pdfplumber
 import fitz  # PyMuPDF
 from PIL import Image
 import pytesseract
@@ -63,48 +63,18 @@ def extract_text_from_pdf(pdf_file, start_page, end_page):
     """Extract text and images with placeholders from the given page range."""
     pdf_file.seek(0)
     pdf_bytes = pdf_file.read()
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-    placeholder_map = {}
-    combined_parts = []
-    image_counter = 1
+    text = ""
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page_num in range(start_page, min(end_page, len(pdf.pages))):
+            page = pdf.pages[page_num]
+            page_text = page.extract_text(x_tolerance=1.5, y_tolerance=1.5)
+            if page_text:
+                text += page_text + "\n"
+    ocr = extract_images_with_ocr(pdf_bytes, range(start_page, end_page))
+    if ocr:
+        text += f"\n[GRAPH]: {ocr}"
 
-    for page_num in range(start_page, min(end_page, len(doc))):
-        page = doc[page_num]
-        page_dict = page.get_text("dict")
-        elements = []
-        for block in page_dict.get("blocks", []):
-            bbox = block.get("bbox", (0, 0, 0, 0))
-            top = bbox[1]
-            if block["type"] == 0:  # text block
-                text = ""
-                for line in block.get("lines", []):
-                    for span in line.get("spans", []):
-                        text += span.get("text", "")
-                    text += "\n"
-                if text.strip():
-                    elements.append({"top": top, "type": "text", "content": text.strip()})
-            elif block["type"] == 1:  # image block
-                xref = block.get("xref")
-                if xref is None:
-                    continue
-                pix = fitz.Pixmap(doc, xref)
-                if pix.n > 4:
-                    pix = fitz.Pixmap(fitz.csRGB, pix)
-                img_bytes = pix.tobytes("png")
-                pix = None
-                placeholder = f"[[IMAGE_{image_counter}]]"
-                ocr_text = pytesseract.image_to_string(Image.open(io.BytesIO(img_bytes))).strip()
-                placeholder_map[placeholder] = ocr_text
-                elements.append({"top": top, "type": "image", "content": placeholder})
-                image_counter += 1
-
-        elements.sort(key=lambda e: e["top"])
-        for elem in elements:
-            combined_parts.append(elem["content"])
-        combined_parts.append("\n")
-
-    doc.close()
     pdf_file.seek(0)
     combined_text = "\n".join(part for part in combined_parts if part).strip()
     return combined_text, placeholder_map
@@ -197,8 +167,9 @@ def main():
 
     if uploaded_file is not None and api_key:
         if st.button("Process PDF"):
-            reader = PyPDF2.PdfReader(uploaded_file)
-            total_pages = len(reader.pages)
+            uploaded_file.seek(0)
+            with pdfplumber.open(uploaded_file) as pdf:
+                total_pages = len(pdf.pages)
 
             progress_bar = st.progress(0)
             status_text = st.empty()
