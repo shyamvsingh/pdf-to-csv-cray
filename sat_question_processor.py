@@ -1,3 +1,4 @@
+
 import streamlit as st
 import os
 import json
@@ -34,6 +35,7 @@ def call_claude_api(prompt, api_key):
     response = requests.post(API_URL, headers=headers, json=payload)
     if response.status_code == 200:
         return response.json()['content'][0]['text']
+
     else:
         st.error(f"API call failed with status code: {response.status_code}")
         st.error(f"Response: {response.text}")
@@ -85,6 +87,7 @@ def extract_text_from_pdf(pdf_file, start_page, end_page, image_dir):
     return text, images_info
 
 def process_pdf_chunk(chunk_text, api_key):
+
     prompt = f"""
     Analyze the following text extracted from an SAT question paper and format it into a structured JSON output. Extract the following details for each question:
     - Question ID (for example - 6ed4df)
@@ -119,6 +122,9 @@ def process_pdf_chunk(chunk_text, api_key):
         }}
       ]
     }}
+
+    Image OCR mapping:
+    {placeholder_info}
 
     Here's the text to process:
 
@@ -165,6 +171,7 @@ def main():
     api_key = st.text_input("Enter your Claude API key:", type="password")
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
+
     if uploaded_file is not None and api_key:
         cleanup_images = st.checkbox("Remove images after processing", value=False)
         if st.button("Process PDF"):
@@ -180,6 +187,7 @@ def main():
             for start_page in range(0, total_pages, 8):
                 end_page = min(start_page + 8, total_pages)
                 chunk_text, chunk_images = extract_text_from_pdf(uploaded_file, start_page, end_page, image_dir)
+
                 
                 processed_data = process_pdf_chunk(chunk_text, api_key)
                 time.sleep(10)
