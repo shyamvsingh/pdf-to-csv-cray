@@ -7,8 +7,9 @@ This Streamlit app processes SAT questions from a PDF file using the Claude API 
 - Upload PDF files containing SAT questions
 - Process questions using Claude API
 - Download results as a CSV file
-- Extract and save page images alongside OCR text
-- Optional cleanup to remove saved images after processing
+
+- Math-aware OCR for equations using the Mathpix API when available
+
 
 ## Requirements
 
@@ -19,6 +20,9 @@ This Streamlit app processes SAT questions from a PDF file using the Claude API 
 - pandas
 - pytesseract
 - requests
+- Pillow
+  
+Optional: set `MATHPIX_APP_ID` and `MATHPIX_APP_KEY` environment variables to enable Mathpix OCR for images containing equations.
 
 `pytesseract` requires the Tesseract OCR engine to be installed on your system.
 
