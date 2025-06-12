@@ -14,6 +14,7 @@ import io
 import base64
 import shutil
 
+
 # API configuration
 API_URL = "https://api.anthropic.com/v1/messages"
 
@@ -85,6 +86,7 @@ def extract_text_from_pdf(pdf_file, start_page, end_page, image_dir):
         text += f"\n[GRAPH]: {ocr}"
     pdf_file.seek(0)
     return text, images_info
+
 
 def process_pdf_chunk(chunk_text, api_key):
 
@@ -171,7 +173,6 @@ def main():
     api_key = st.text_input("Enter your Claude API key:", type="password")
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
-
     if uploaded_file is not None and api_key:
         cleanup_images = st.checkbox("Remove images after processing", value=False)
         if st.button("Process PDF"):
@@ -187,7 +188,6 @@ def main():
             for start_page in range(0, total_pages, 8):
                 end_page = min(start_page + 8, total_pages)
                 chunk_text, chunk_images = extract_text_from_pdf(uploaded_file, start_page, end_page, image_dir)
-
                 
                 processed_data = process_pdf_chunk(chunk_text, api_key)
                 time.sleep(10)
@@ -199,21 +199,25 @@ def main():
                     status_text.text(f"Processed pages {start_page+1}-{end_page}")
                 else:
                     status_text.text(f"No valid data found for pages {start_page+1}-{end_page}")
+
                 
                 progress = (end_page / total_pages)
                 progress_bar.progress(progress)
                 
                 time.sleep(2)
 
+
             if all_questions:
                 df = pd.DataFrame(all_questions)
                 df['options'] = df['options'].apply(lambda x: '; '.join([f"{opt['label']}: {opt['text']}" for opt in x]))
                 if 'images' in df.columns:
                     df['images'] = df['images'].apply(json.dumps)
+
                 
                 csv = df.to_csv(index=False)
                 csv_bytes = csv.encode()
                 
+
                 st.download_button(
                     label="Download CSV",
                     data=csv_bytes,
@@ -227,6 +231,7 @@ def main():
                 st.error("No questions were processed successfully.")
                 if cleanup_images:
                     shutil.rmtree(image_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     main()
