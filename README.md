@@ -7,6 +7,8 @@ This Streamlit app processes SAT questions from a PDF file using the Claude API 
 - Upload PDF files containing SAT questions
 - Process questions using Claude API
 - Download results as a CSV file
+- Extract and save page images alongside OCR text
+- Optional cleanup to remove saved images after processing
 
 ## Requirements
 
