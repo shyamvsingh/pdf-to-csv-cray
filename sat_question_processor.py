@@ -60,9 +60,10 @@ def extract_images_with_ocr(pdf_bytes, page_range):
     return "\n".join(ocr_fragments)
 
 def extract_text_from_pdf(pdf_file, start_page, end_page):
-    """Extract text and OCR content from the given page range."""
+    """Extract text and images with placeholders from the given page range."""
     pdf_file.seek(0)
     pdf_bytes = pdf_file.read()
+
     text = ""
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for page_num in range(start_page, min(end_page, len(pdf.pages))):
@@ -73,10 +74,14 @@ def extract_text_from_pdf(pdf_file, start_page, end_page):
     ocr = extract_images_with_ocr(pdf_bytes, range(start_page, end_page))
     if ocr:
         text += f"\n[GRAPH]: {ocr}"
-    pdf_file.seek(0)
-    return text
 
-def process_pdf_chunk(chunk_text, api_key):
+    pdf_file.seek(0)
+    combined_text = "\n".join(part for part in combined_parts if part).strip()
+    return combined_text, placeholder_map
+
+def process_pdf_chunk(chunk_text, placeholder_map, api_key):
+    placeholder_info = json.dumps(placeholder_map, indent=2)
+
     prompt = f"""
     Analyze the following text extracted from an SAT question paper and format it into a structured JSON output. Extract the following details for each question:
     - Question ID (for example - 6ed4df)
@@ -111,6 +116,9 @@ def process_pdf_chunk(chunk_text, api_key):
         }}
       ]
     }}
+
+    Image OCR mapping:
+    {placeholder_info}
 
     Here's the text to process:
 
@@ -170,9 +178,9 @@ def main():
 
             for start_page in range(0, total_pages, 8):
                 end_page = min(start_page + 8, total_pages)
-                chunk_text = extract_text_from_pdf(uploaded_file, start_page, end_page)
-                
-                processed_data = process_pdf_chunk(chunk_text, api_key)
+                chunk_text, placeholder_map = extract_text_from_pdf(uploaded_file, start_page, end_page)
+
+                processed_data = process_pdf_chunk(chunk_text, placeholder_map, api_key)
                 time.sleep(10)
                 
                 if processed_data and 'questions' in processed_data:
