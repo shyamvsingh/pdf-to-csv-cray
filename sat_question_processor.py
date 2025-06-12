@@ -60,22 +60,58 @@ def extract_images_with_ocr(pdf_bytes, page_range):
     return "\n".join(ocr_fragments)
 
 def extract_text_from_pdf(pdf_file, start_page, end_page):
-    """Extract text and OCR content from the given page range."""
+    """Extract text and images with placeholders from the given page range."""
     pdf_file.seek(0)
     pdf_bytes = pdf_file.read()
-    reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
-    text = ""
-    for page_num in range(start_page, min(end_page, len(reader.pages))):
-        page_text = reader.pages[page_num].extract_text()
-        if page_text:
-            text += page_text
-    ocr = extract_images_with_ocr(pdf_bytes, range(start_page, end_page))
-    if ocr:
-        text += f"\n[GRAPH]: {ocr}"
-    pdf_file.seek(0)
-    return text
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-def process_pdf_chunk(chunk_text, api_key):
+    placeholder_map = {}
+    combined_parts = []
+    image_counter = 1
+
+    for page_num in range(start_page, min(end_page, len(doc))):
+        page = doc[page_num]
+        page_dict = page.get_text("dict")
+        elements = []
+        for block in page_dict.get("blocks", []):
+            bbox = block.get("bbox", (0, 0, 0, 0))
+            top = bbox[1]
+            if block["type"] == 0:  # text block
+                text = ""
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        text += span.get("text", "")
+                    text += "\n"
+                if text.strip():
+                    elements.append({"top": top, "type": "text", "content": text.strip()})
+            elif block["type"] == 1:  # image block
+                xref = block.get("xref")
+                if xref is None:
+                    continue
+                pix = fitz.Pixmap(doc, xref)
+                if pix.n > 4:
+                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                img_bytes = pix.tobytes("png")
+                pix = None
+                placeholder = f"[[IMAGE_{image_counter}]]"
+                ocr_text = pytesseract.image_to_string(Image.open(io.BytesIO(img_bytes))).strip()
+                placeholder_map[placeholder] = ocr_text
+                elements.append({"top": top, "type": "image", "content": placeholder})
+                image_counter += 1
+
+        elements.sort(key=lambda e: e["top"])
+        for elem in elements:
+            combined_parts.append(elem["content"])
+        combined_parts.append("\n")
+
+    doc.close()
+    pdf_file.seek(0)
+    combined_text = "\n".join(part for part in combined_parts if part).strip()
+    return combined_text, placeholder_map
+
+def process_pdf_chunk(chunk_text, placeholder_map, api_key):
+    placeholder_info = json.dumps(placeholder_map, indent=2)
+
     prompt = f"""
     Analyze the following text extracted from an SAT question paper and format it into a structured JSON output. Extract the following details for each question:
     - Question ID (for example - 6ed4df)
@@ -110,6 +146,9 @@ def process_pdf_chunk(chunk_text, api_key):
         }}
       ]
     }}
+
+    Image OCR mapping:
+    {placeholder_info}
 
     Here's the text to process:
 
@@ -168,9 +207,9 @@ def main():
 
             for start_page in range(0, total_pages, 8):
                 end_page = min(start_page + 8, total_pages)
-                chunk_text = extract_text_from_pdf(uploaded_file, start_page, end_page)
-                
-                processed_data = process_pdf_chunk(chunk_text, api_key)
+                chunk_text, placeholder_map = extract_text_from_pdf(uploaded_file, start_page, end_page)
+
+                processed_data = process_pdf_chunk(chunk_text, placeholder_map, api_key)
                 time.sleep(10)
                 
                 if processed_data and 'questions' in processed_data:
