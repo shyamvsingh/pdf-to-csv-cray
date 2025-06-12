@@ -7,13 +7,15 @@ This Streamlit app processes SAT questions from a PDF file using the Claude API 
 - Upload PDF files containing SAT questions
 - Process questions using Claude API
 - Download results as a CSV file
+
 - Math-aware OCR for equations using the Mathpix API when available
+
 
 ## Requirements
 
 - Python 3.7+
 - Streamlit
-- PyPDF2
+- pdfplumber
 - PyMuPDF
 - pandas
 - pytesseract

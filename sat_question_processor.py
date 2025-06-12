@@ -1,3 +1,4 @@
+<
 import streamlit as st
 import os
 import json
@@ -10,6 +11,7 @@ from PIL import Image
 import pytesseract
 import pandas as pd
 import io
+
 
 # API configuration
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -77,6 +79,7 @@ def call_claude_api(prompt, api_key):
     response = requests.post(API_URL, headers=headers, json=payload)
     if response.status_code == 200:
         return response.json()['content'][0]['text']
+
     else:
         st.error(f"API call failed with status code: {response.status_code}")
         st.error(f"Response: {response.text}")
@@ -134,7 +137,9 @@ def extract_text_from_pdf(pdf_file, start_page, end_page, image_out_dir="extract
     pdf_file.seek(0)
     return text, image_results
 
+
 def process_pdf_chunk(chunk_text, api_key):
+
     prompt = f"""
     Analyze the following text extracted from an SAT question paper and format it into a structured JSON output. Extract the following details for each question:
     - Question ID (for example - 6ed4df)
@@ -169,6 +174,9 @@ def process_pdf_chunk(chunk_text, api_key):
         }}
       ]
     }}
+
+    Image OCR mapping:
+    {placeholder_info}
 
     Here's the text to process:
 
@@ -216,12 +224,14 @@ def main():
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
     if uploaded_file is not None and api_key:
+        cleanup_images = st.checkbox("Remove images after processing", value=False)
         if st.button("Process PDF"):
             reader = PyPDF2.PdfReader(uploaded_file)
             total_pages = len(reader.pages)
 
             progress_bar = st.progress(0)
             status_text = st.empty()
+
 
             all_questions = []
             image_ocr_results = []
@@ -231,29 +241,36 @@ def main():
                 chunk_text, images_data = extract_text_from_pdf(
                     uploaded_file, start_page, end_page
                 )
+
                 
                 processed_data = process_pdf_chunk(chunk_text, api_key)
                 image_ocr_results.extend(images_data)
                 time.sleep(10)
-                
+
                 if processed_data and 'questions' in processed_data:
+                    for q in processed_data['questions']:
+                        q['images'] = chunk_images
                     all_questions.extend(processed_data['questions'])
                     status_text.text(f"Processed pages {start_page+1}-{end_page}")
                 else:
                     status_text.text(f"No valid data found for pages {start_page+1}-{end_page}")
+
                 
                 progress = (end_page / total_pages)
                 progress_bar.progress(progress)
                 
                 time.sleep(2)
 
+
             if all_questions:
                 df = pd.DataFrame(all_questions)
                 df['options'] = df['options'].apply(lambda x: '; '.join([f"{opt['label']}: {opt['text']}" for opt in x]))
+
                 
                 csv = df.to_csv(index=False)
                 csv_bytes = csv.encode()
                 
+
                 st.download_button(
                     label="Download CSV",
                     data=csv_bytes,
@@ -270,8 +287,12 @@ def main():
                         mime="text/csv",
                     )
                 st.success("Processing complete! You can now download the CSV file.")
+
             else:
                 st.error("No questions were processed successfully.")
+                if cleanup_images:
+                    shutil.rmtree(image_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     main()
