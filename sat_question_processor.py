@@ -4,7 +4,7 @@ import json
 import time
 import re
 import requests
-import PyPDF2
+import pdfplumber
 import fitz  # PyMuPDF
 from PIL import Image
 import pytesseract
@@ -63,12 +63,13 @@ def extract_text_from_pdf(pdf_file, start_page, end_page):
     """Extract text and OCR content from the given page range."""
     pdf_file.seek(0)
     pdf_bytes = pdf_file.read()
-    reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
     text = ""
-    for page_num in range(start_page, min(end_page, len(reader.pages))):
-        page_text = reader.pages[page_num].extract_text()
-        if page_text:
-            text += page_text
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page_num in range(start_page, min(end_page, len(pdf.pages))):
+            page = pdf.pages[page_num]
+            page_text = page.extract_text(x_tolerance=1.5, y_tolerance=1.5)
+            if page_text:
+                text += page_text + "\n"
     ocr = extract_images_with_ocr(pdf_bytes, range(start_page, end_page))
     if ocr:
         text += f"\n[GRAPH]: {ocr}"
@@ -158,8 +159,9 @@ def main():
 
     if uploaded_file is not None and api_key:
         if st.button("Process PDF"):
-            reader = PyPDF2.PdfReader(uploaded_file)
-            total_pages = len(reader.pages)
+            uploaded_file.seek(0)
+            with pdfplumber.open(uploaded_file) as pdf:
+                total_pages = len(pdf.pages)
 
             progress_bar = st.progress(0)
             status_text = st.empty()
