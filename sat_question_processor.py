@@ -1,15 +1,18 @@
+
 import streamlit as st
 import os
 import json
 import time
 import re
 import requests
-import pdfplumber
+import PyPDF2
 import fitz  # PyMuPDF
 from PIL import Image
 import pytesseract
 import pandas as pd
 import io
+import base64
+import shutil
 
 # API configuration
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -32,55 +35,58 @@ def call_claude_api(prompt, api_key):
     response = requests.post(API_URL, headers=headers, json=payload)
     if response.status_code == 200:
         return response.json()['content'][0]['text']
+
     else:
         st.error(f"API call failed with status code: {response.status_code}")
         st.error(f"Response: {response.text}")
         return None
 
 
-def extract_images_with_ocr(pdf_bytes, page_range):
-    """Extract images from the specified pages and run OCR on them."""
+def extract_images_with_ocr(pdf_bytes, page_range, save_dir):
+    """Extract images from the specified pages, save them, and run OCR on them."""
     ocr_fragments = []
+    images_info = []
+    os.makedirs(save_dir, exist_ok=True)
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     for page_num in page_range:
         if page_num < len(doc):
             page = doc[page_num]
-            for img in page.get_images(full=True):
+            for img_index, img in enumerate(page.get_images(full=True), start=1):
                 xref = img[0]
                 pix = fitz.Pixmap(doc, xref)
                 if pix.n > 4:  # convert CMYK/GRAYSCALE/etc to RGB
                     pix = fitz.Pixmap(fitz.csRGB, pix)
                 img_bytes = pix.tobytes("png")
                 pix = None
+                out_path = os.path.join(save_dir, f"page{page_num+1}_img{img_index}.png")
+                with open(out_path, "wb") as f:
+                    f.write(img_bytes)
                 img_obj = Image.open(io.BytesIO(img_bytes))
                 text = pytesseract.image_to_string(img_obj)
                 if text.strip():
                     ocr_fragments.append(text.strip())
+                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+                images_info.append({"filename": out_path, "base64": img_b64})
     doc.close()
-    return "\n".join(ocr_fragments)
+    return "\n".join(ocr_fragments), images_info
 
-def extract_text_from_pdf(pdf_file, start_page, end_page):
-    """Extract text and images with placeholders from the given page range."""
+def extract_text_from_pdf(pdf_file, start_page, end_page, image_dir):
+    """Extract text, OCR content, and save images for the given page range."""
     pdf_file.seek(0)
     pdf_bytes = pdf_file.read()
-
+    reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
     text = ""
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page_num in range(start_page, min(end_page, len(pdf.pages))):
-            page = pdf.pages[page_num]
-            page_text = page.extract_text(x_tolerance=1.5, y_tolerance=1.5)
-            if page_text:
-                text += page_text + "\n"
-    ocr = extract_images_with_ocr(pdf_bytes, range(start_page, end_page))
+    for page_num in range(start_page, min(end_page, len(reader.pages))):
+        page_text = reader.pages[page_num].extract_text()
+        if page_text:
+            text += page_text
+    ocr, images_info = extract_images_with_ocr(pdf_bytes, range(start_page, end_page), image_dir)
     if ocr:
         text += f"\n[GRAPH]: {ocr}"
-
     pdf_file.seek(0)
-    combined_text = "\n".join(part for part in combined_parts if part).strip()
-    return combined_text, placeholder_map
+    return text, images_info
 
-def process_pdf_chunk(chunk_text, placeholder_map, api_key):
-    placeholder_info = json.dumps(placeholder_map, indent=2)
+def process_pdf_chunk(chunk_text, api_key):
 
     prompt = f"""
     Analyze the following text extracted from an SAT question paper and format it into a structured JSON output. Extract the following details for each question:
@@ -165,25 +171,30 @@ def main():
     api_key = st.text_input("Enter your Claude API key:", type="password")
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
+
     if uploaded_file is not None and api_key:
+        cleanup_images = st.checkbox("Remove images after processing", value=False)
         if st.button("Process PDF"):
-            uploaded_file.seek(0)
-            with pdfplumber.open(uploaded_file) as pdf:
-                total_pages = len(pdf.pages)
+            reader = PyPDF2.PdfReader(uploaded_file)
+            total_pages = len(reader.pages)
 
             progress_bar = st.progress(0)
             status_text = st.empty()
 
             all_questions = []
+            image_dir = "temp_images"
 
             for start_page in range(0, total_pages, 8):
                 end_page = min(start_page + 8, total_pages)
-                chunk_text, placeholder_map = extract_text_from_pdf(uploaded_file, start_page, end_page)
+                chunk_text, chunk_images = extract_text_from_pdf(uploaded_file, start_page, end_page, image_dir)
 
-                processed_data = process_pdf_chunk(chunk_text, placeholder_map, api_key)
-                time.sleep(10)
                 
+                processed_data = process_pdf_chunk(chunk_text, api_key)
+                time.sleep(10)
+
                 if processed_data and 'questions' in processed_data:
+                    for q in processed_data['questions']:
+                        q['images'] = chunk_images
                     all_questions.extend(processed_data['questions'])
                     status_text.text(f"Processed pages {start_page+1}-{end_page}")
                 else:
@@ -197,6 +208,8 @@ def main():
             if all_questions:
                 df = pd.DataFrame(all_questions)
                 df['options'] = df['options'].apply(lambda x: '; '.join([f"{opt['label']}: {opt['text']}" for opt in x]))
+                if 'images' in df.columns:
+                    df['images'] = df['images'].apply(json.dumps)
                 
                 csv = df.to_csv(index=False)
                 csv_bytes = csv.encode()
@@ -208,8 +221,12 @@ def main():
                     mime="text/csv"
                 )
                 st.success("Processing complete! You can now download the CSV file.")
+                if cleanup_images:
+                    shutil.rmtree(image_dir, ignore_errors=True)
             else:
                 st.error("No questions were processed successfully.")
+                if cleanup_images:
+                    shutil.rmtree(image_dir, ignore_errors=True)
 
 if __name__ == "__main__":
     main()
