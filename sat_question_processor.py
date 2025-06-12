@@ -14,6 +14,51 @@ import io
 # API configuration
 API_URL = "https://api.anthropic.com/v1/messages"
 
+# Mathpix OCR endpoint
+MATHPIX_URL = "https://api.mathpix.com/v3/text"
+
+
+def mathpix_ocr(img_bytes):
+    """Run Mathpix OCR on the given image bytes and return LaTeX or text."""
+    app_id = os.environ.get("MATHPIX_APP_ID")
+    app_key = os.environ.get("MATHPIX_APP_KEY")
+    if not (app_id and app_key):
+        return None
+
+    headers = {
+        "app_id": app_id,
+        "app_key": app_key,
+    }
+    data = {
+        "formats": ["text", "latex_styled"],
+        "data_options": {"include_asciimath": False, "include_latex": True},
+    }
+
+    files = {"file": ("image.png", img_bytes)}
+    try:
+        resp = requests.post(
+            MATHPIX_URL,
+            headers=headers,
+            data={"options_json": json.dumps(data)},
+            files=files,
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            result = resp.json()
+            return result.get("latex_styled") or result.get("text")
+    except Exception:
+        pass
+    return None
+
+
+def looks_like_math(text):
+    """Heuristic check whether OCR text likely contains math."""
+    if not text:
+        return False
+    math_chars = "=+-*/^_()[]{}\\|<>"  # common math symbols
+    score = sum(1 for c in text if c in math_chars)
+    return score > len(text) * 0.2
+
 def call_claude_api(prompt, api_key):
     headers = {
         "x-api-key": api_key,
@@ -38,14 +83,15 @@ def call_claude_api(prompt, api_key):
         return None
 
 
-def extract_images_with_ocr(pdf_bytes, page_range):
-    """Extract images from the specified pages and run OCR on them."""
-    ocr_fragments = []
+def extract_images_with_ocr(pdf_bytes, page_range, out_dir="extracted_images"):
+    """Extract images from the specified pages, run OCR and return results."""
+    os.makedirs(out_dir, exist_ok=True)
+    results = []
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     for page_num in page_range:
         if page_num < len(doc):
             page = doc[page_num]
-            for img in page.get_images(full=True):
+            for img_index, img in enumerate(page.get_images(full=True), start=1):
                 xref = img[0]
                 pix = fitz.Pixmap(doc, xref)
                 if pix.n > 4:  # convert CMYK/GRAYSCALE/etc to RGB
@@ -53,13 +99,23 @@ def extract_images_with_ocr(pdf_bytes, page_range):
                 img_bytes = pix.tobytes("png")
                 pix = None
                 img_obj = Image.open(io.BytesIO(img_bytes))
-                text = pytesseract.image_to_string(img_obj)
-                if text.strip():
-                    ocr_fragments.append(text.strip())
-    doc.close()
-    return "\n".join(ocr_fragments)
+                img_path = os.path.join(
+                    out_dir, f"page{page_num + 1}_img{img_index}.png"
+                )
+                img_obj.save(img_path)
 
-def extract_text_from_pdf(pdf_file, start_page, end_page):
+                text = pytesseract.image_to_string(img_obj).strip()
+                if looks_like_math(text):
+                    latex = mathpix_ocr(img_bytes) or text
+                else:
+                    latex = text
+
+                if latex:
+                    results.append({"image": img_path, "text": latex})
+    doc.close()
+    return results
+
+def extract_text_from_pdf(pdf_file, start_page, end_page, image_out_dir="extracted_images"):
     """Extract text and OCR content from the given page range."""
     pdf_file.seek(0)
     pdf_bytes = pdf_file.read()
@@ -69,11 +125,14 @@ def extract_text_from_pdf(pdf_file, start_page, end_page):
         page_text = reader.pages[page_num].extract_text()
         if page_text:
             text += page_text
-    ocr = extract_images_with_ocr(pdf_bytes, range(start_page, end_page))
-    if ocr:
-        text += f"\n[GRAPH]: {ocr}"
+
+    image_results = extract_images_with_ocr(pdf_bytes, range(start_page, end_page), image_out_dir)
+    if image_results:
+        ocr_text = "\n".join(f"[IMAGE: {res['image']}] {res['text']}" for res in image_results)
+        text += f"\n{ocr_text}"
+
     pdf_file.seek(0)
-    return text
+    return text, image_results
 
 def process_pdf_chunk(chunk_text, api_key):
     prompt = f"""
@@ -165,12 +224,16 @@ def main():
             status_text = st.empty()
 
             all_questions = []
+            image_ocr_results = []
 
             for start_page in range(0, total_pages, 8):
                 end_page = min(start_page + 8, total_pages)
-                chunk_text = extract_text_from_pdf(uploaded_file, start_page, end_page)
+                chunk_text, images_data = extract_text_from_pdf(
+                    uploaded_file, start_page, end_page
+                )
                 
                 processed_data = process_pdf_chunk(chunk_text, api_key)
+                image_ocr_results.extend(images_data)
                 time.sleep(10)
                 
                 if processed_data and 'questions' in processed_data:
@@ -197,6 +260,15 @@ def main():
                     file_name="sat_questions.csv",
                     mime="text/csv"
                 )
+                if image_ocr_results:
+                    img_df = pd.DataFrame(image_ocr_results)
+                    img_csv = img_df.to_csv(index=False)
+                    st.download_button(
+                        label="Download Image OCR",
+                        data=img_csv,
+                        file_name="image_ocr.csv",
+                        mime="text/csv",
+                    )
                 st.success("Processing complete! You can now download the CSV file.")
             else:
                 st.error("No questions were processed successfully.")
