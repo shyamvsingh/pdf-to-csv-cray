@@ -1,4 +1,3 @@
-<
 import streamlit as st
 import os
 import json
@@ -11,6 +10,10 @@ from PIL import Image
 import pytesseract
 import pandas as pd
 import io
+import shutil
+
+# Directory used for storing extracted images
+image_dir = "extracted_images"
 
 
 # API configuration
@@ -175,9 +178,6 @@ def process_pdf_chunk(chunk_text, api_key):
       ]
     }}
 
-    Image OCR mapping:
-    {placeholder_info}
-
     Here's the text to process:
 
     {chunk_text}
@@ -239,7 +239,7 @@ def main():
             for start_page in range(0, total_pages, 8):
                 end_page = min(start_page + 8, total_pages)
                 chunk_text, images_data = extract_text_from_pdf(
-                    uploaded_file, start_page, end_page
+                    uploaded_file, start_page, end_page, image_dir
                 )
 
                 
@@ -249,7 +249,7 @@ def main():
 
                 if processed_data and 'questions' in processed_data:
                     for q in processed_data['questions']:
-                        q['images'] = chunk_images
+                        q['images'] = images_data
                     all_questions.extend(processed_data['questions'])
                     status_text.text(f"Processed pages {start_page+1}-{end_page}")
                 else:
