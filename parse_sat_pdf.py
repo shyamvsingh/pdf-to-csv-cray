@@ -5,7 +5,7 @@ import json
 import time
 import uuid
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import fitz  # PyMuPDF
 import pandas as pd
@@ -149,15 +149,23 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
     raise RuntimeError("OpenAI request failed or returned invalid JSON")
 
 
-def append_to_csv(questions: List[Dict[str, Any]], csv_path: str = CSV_PATH) -> None:
+def append_to_csv(
+    questions: List[Dict[str, Any]], csv_path: Optional[str] = None
+) -> None:
+    """Append question data to a CSV file."""
+    if csv_path is None:
+        csv_path = CSV_PATH
+
     df = pd.DataFrame(questions)
-    if os.path.exists(csv_path):
+
+    if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
         df_prev = pd.read_csv(csv_path)
         df = pd.concat([df_prev, df], ignore_index=True)
+
     df.to_csv(csv_path, index=False)
 
 
-def process_pdf(pdf_path: str) -> None:
+def process_pdf(pdf_path: str, csv_path: str = CSV_PATH) -> None:
     doc = fitz.open(pdf_path)
     try:
         for page_num in range(len(doc)):
@@ -178,7 +186,7 @@ def process_pdf(pdf_path: str) -> None:
             for q in questions:
                 if q.get("image_path") in image_map:
                     q["image_path"] = image_map[q["image_path"]]
-            append_to_csv(questions)
+            append_to_csv(questions, csv_path)
     finally:
         doc.close()
 
@@ -191,6 +199,5 @@ if __name__ == "__main__":
     parser.add_argument("--csv", default=CSV_PATH, help="Output CSV file")
     args = parser.parse_args()
 
-    CSV_PATH = args.csv
-    process_pdf(args.pdf)
-    print(f"Results saved to {CSV_PATH}")
+    process_pdf(args.pdf, args.csv)
+    print(f"Results saved to {args.csv}")
