@@ -51,15 +51,11 @@ def clean_json_reply(reply: str) -> str:
     return cleaned.strip()
 
 
-def parse_pdf_page(pdf_path: str, page_num: int) -> bytes:
-    """Render a PDF page to image bytes."""
-    doc = fitz.open(pdf_path)
-    try:
-        page = doc[page_num]
-        pix = page.get_pixmap(dpi=300)
-        return pix.tobytes("png")
-    finally:
-        doc.close()
+def parse_pdf_page(doc: fitz.Document, page_num: int) -> bytes:
+    """Render a page from an open PDF document to image bytes."""
+    page = doc[page_num]
+    pix = page.get_pixmap(dpi=300)
+    return pix.tobytes("png")
 
 
 
