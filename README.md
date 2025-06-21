@@ -38,6 +38,9 @@ python parse_sat_pdf.py path/to/questions.pdf --csv parsed_questions.csv
 
 Images extracted from the PDF will be stored in the `images/` directory and the questions will be appended to the CSV file.
 
+If the OpenAI response contains stray backslashes that break JSON formatting,
+the parser will attempt to escape them and retry parsing automatically.
+
 ## Streamlit Interface
 
 Launch an interactive UI:

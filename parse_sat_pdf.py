@@ -51,6 +51,20 @@ def clean_json_reply(reply: str) -> str:
     return cleaned.strip()
 
 
+def safe_json_loads(clean_reply: str) -> Optional[Dict[str, Any]]:
+    """Safely parse JSON, escaping stray backslashes if needed."""
+    try:
+        return json.loads(clean_reply)
+    except json.JSONDecodeError as e:
+        if "Invalid \\escape" in str(e):
+            clean_reply = re.sub(r'\\(?![\"\\/bfnrtu])', r'\\\\', clean_reply)
+            try:
+                return json.loads(clean_reply)
+            except json.JSONDecodeError:
+                return None
+        return None
+
+
 def parse_pdf_page(doc: fitz.Document, page_num: int) -> bytes:
     """Render a page from an open PDF document to image bytes."""
     page = doc[page_num]
@@ -132,8 +146,13 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
             )
             reply = resp.choices[0].message.content
             clean_reply = clean_json_reply(reply)
-            data = json.loads(clean_reply)
-            if isinstance(data, dict) and isinstance(data.get("questions"), list):
+            data = safe_json_loads(clean_reply)
+            if data is None:
+                raise ValueError("JSON parsing failed")
+            if (
+                isinstance(data, dict)
+                and isinstance(data.get("questions"), list)
+            ):
                 return data["questions"]
         except Exception as e:
             logging.error(f"OpenAI attempt {attempt + 1} failed: {e}")
