@@ -2,6 +2,7 @@ import os
 import io
 import base64
 import json
+import json5
 import time
 import uuid
 import re
@@ -52,7 +53,7 @@ def clean_json_reply(reply: str) -> str:
 
 
 def safe_json_loads(clean_reply: str) -> Optional[Dict[str, Any]]:
-    """Safely parse JSON, escaping stray backslashes if needed."""
+    """Attempt to load JSON using multiple strategies."""
     try:
         return json.loads(clean_reply)
     except json.JSONDecodeError as e:
@@ -61,7 +62,10 @@ def safe_json_loads(clean_reply: str) -> Optional[Dict[str, Any]]:
             try:
                 return json.loads(clean_reply)
             except json.JSONDecodeError:
-                return None
+                pass
+    try:
+        return json5.loads(clean_reply)
+    except Exception:
         return None
 
 
@@ -141,6 +145,7 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
             resp = openai_client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=messages,
+                response_format={"type": "json_object"},
                 max_tokens=2048,
                 temperature=0,
             )
@@ -174,8 +179,11 @@ def append_to_csv(
     df = pd.DataFrame(questions)
 
     if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
-        df_prev = pd.read_csv(csv_path)
-        df = pd.concat([df_prev, df], ignore_index=True)
+        try:
+            df_prev = pd.read_csv(csv_path)
+            df = pd.concat([df_prev, df], ignore_index=True)
+        except Exception as e:
+            logging.error(f"Failed reading existing CSV: {e}")
 
     df.to_csv(csv_path, index=False)
 
