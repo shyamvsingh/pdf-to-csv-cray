@@ -4,6 +4,7 @@ import base64
 import json
 import time
 import uuid
+import re
 from typing import List, Dict, Any
 
 import fitz  # PyMuPDF
@@ -28,6 +29,16 @@ IMAGE_DIR = "images"
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+
+def clean_json_reply(reply: str) -> str:
+    """Strip code fences like ```json``` from an OpenAI reply."""
+    if not reply:
+        return ""
+    cleaned = reply.strip()
+    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s*```$', '', cleaned)
+    return cleaned.strip()
 
 
 def parse_pdf_page(pdf_path: str, page_num: int) -> bytes:
@@ -113,7 +124,8 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
                 temperature=0,
             )
             reply = resp.choices[0].message.content
-            data = json.loads(reply)
+            clean_reply = clean_json_reply(reply)
+            data = json.loads(clean_reply)
             if isinstance(data, dict) and isinstance(data.get("questions"), list):
                 return data["questions"]
         except Exception as e:
