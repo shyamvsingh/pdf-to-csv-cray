@@ -5,4 +5,6 @@ requests
 PyMuPDF
 Pillow
 
+json5
+
 streamlit
