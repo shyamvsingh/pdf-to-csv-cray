@@ -31,6 +31,7 @@ os.makedirs(IMAGE_DIR, exist_ok=True)
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 
+
 def clean_json_reply(reply: str) -> str:
     """Extract JSON content from an OpenAI reply."""
     if not reply:
@@ -46,6 +47,7 @@ def clean_json_reply(reply: str) -> str:
         obj_match = re.search(r"{.*}", cleaned, re.DOTALL)
         if obj_match:
             cleaned = obj_match.group(0)
+
     return cleaned.strip()
 
 
@@ -58,6 +60,7 @@ def parse_pdf_page(pdf_path: str, page_num: int) -> bytes:
         return pix.tobytes("png")
     finally:
         doc.close()
+
 
 
 def extract_mathpix_data(image_bytes: bytes, retries: int = 3) -> Dict[str, Any]:
@@ -87,8 +90,8 @@ def extract_mathpix_data(image_bytes: bytes, retries: int = 3) -> Dict[str, Any]
             )
             if resp.status_code == 200:
                 return resp.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Mathpix attempt {attempt + 1} failed: {e}")
         time.sleep(2 ** attempt)
     raise RuntimeError(f"Mathpix request failed after {retries} attempts")
 
@@ -156,26 +159,28 @@ def append_to_csv(questions: List[Dict[str, Any]], csv_path: str = CSV_PATH) -> 
 
 def process_pdf(pdf_path: str) -> None:
     doc = fitz.open(pdf_path)
-    for page_num in range(len(doc)):
-        print(f"Processing page {page_num + 1}/{len(doc)}")
-        page_bytes = parse_pdf_page(pdf_path, page_num)
-        mathpix_data = extract_mathpix_data(page_bytes)
-        text = mathpix_data.get("text", "")
-        logging.info(f"Mathpix OCR text snippet: {text[:200]}")
-        images = mathpix_data.get("images", []) or []
+    try:
+        for page_num in range(len(doc)):
+            print(f"Processing page {page_num + 1}/{len(doc)}")
+            page_bytes = parse_pdf_page(doc, page_num)
+            mathpix_data = extract_mathpix_data(page_bytes)
+            text = mathpix_data.get("text", "")
+            logging.info(f"Mathpix OCR text snippet: {text[:200]}")
+            images = mathpix_data.get("images", []) or []
 
-        image_map = {}
-        for idx, img in enumerate(images, start=1):
-            question_id = str(uuid.uuid4())[:8]
-            path = save_image(img.get("data", ""), question_id, f"img{idx}")
-            image_map[f"image{idx}"] = path
+            image_map = {}
+            for idx, img in enumerate(images, start=1):
+                question_id = str(uuid.uuid4())[:8]
+                path = save_image(img.get("data", ""), question_id, f"img{idx}")
+                image_map[f"image{idx}"] = path
 
-        questions = structure_question_with_openai(text, image_map)
-        for q in questions:
-            if q.get("image_path") in image_map:
-                q["image_path"] = image_map[q["image_path"]]
-        append_to_csv(questions)
-    doc.close()
+            questions = structure_question_with_openai(text, image_map)
+            for q in questions:
+                if q.get("image_path") in image_map:
+                    q["image_path"] = image_map[q["image_path"]]
+            append_to_csv(questions)
+    finally:
+        doc.close()
 
 
 if __name__ == "__main__":
