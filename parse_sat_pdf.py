@@ -33,12 +33,21 @@ openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 
 def clean_json_reply(reply: str) -> str:
-    """Strip code fences like ```json``` from an OpenAI reply."""
+    """Extract JSON content from an OpenAI reply."""
     if not reply:
         return ""
     cleaned = reply.strip()
-    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\s*```$', '', cleaned)
+
+    # Prefer JSON inside fenced blocks
+    fence_match = re.search(r"```(?:json)?(.*?)```", cleaned, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        cleaned = fence_match.group(1)
+    else:
+        # Fall back to the first JSON object found
+        obj_match = re.search(r"{.*}", cleaned, re.DOTALL)
+        if obj_match:
+            cleaned = obj_match.group(0)
+
     return cleaned.strip()
 
 
@@ -134,6 +143,8 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
             logging.error(f"OpenAI attempt {attempt + 1} failed: {e}")
             if reply:
                 logging.error(f"OpenAI raw reply: {reply}")
+            if 'clean_reply' in locals():
+                logging.error(f"OpenAI cleaned reply: {clean_reply}")
             time.sleep(2 ** attempt)
     raise RuntimeError("OpenAI request failed or returned invalid JSON")
 
