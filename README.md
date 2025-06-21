@@ -13,7 +13,7 @@ The script uses the Mathpix API to perform OCR on each page and OpenAI models to
 - requests
 - PyMuPDF
 - Pillow
-
+- streamlit
 ## Installation
 
 1. Clone this repository and install dependencies:
@@ -37,6 +37,15 @@ python parse_sat_pdf.py path/to/questions.pdf --csv parsed_questions.csv
 ```
 
 Images extracted from the PDF will be stored in the `images/` directory and the questions will be appended to the CSV file.
+
+## Streamlit Interface
+
+Launch an interactive UI:
+```bash
+streamlit run streamlit_app.py
+```
+Upload a PDF, click "Convert" and then use the provided download button to save the resulting CSV.
+
 
 ## Output Format
 
