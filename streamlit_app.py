@@ -13,11 +13,10 @@ if uploaded_file is not None:
         tmp_path = tmp.name
 
     output_csv = os.path.join(tempfile.gettempdir(), "converted_questions.csv")
-    parse_sat_pdf.CSV_PATH = output_csv
 
     if st.button("Convert"):
         with st.spinner("Processing PDF..."):
-            parse_sat_pdf.process_pdf(tmp_path)
+            parse_sat_pdf.process_pdf(tmp_path, output_csv)
         with open(output_csv, "rb") as f:
             st.download_button(
                 label="Download CSV",
