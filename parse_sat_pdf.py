@@ -12,8 +12,10 @@ import requests
 from dotenv import load_dotenv
 from PIL import Image
 import openai
+import logging
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
@@ -102,6 +104,7 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
     ]
 
     for attempt in range(retries):
+        reply = ""
         try:
             resp = openai_client.chat.completions.create(
                 model=OPENAI_MODEL,
@@ -113,7 +116,10 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
             data = json.loads(reply)
             if isinstance(data, dict) and isinstance(data.get("questions"), list):
                 return data["questions"]
-        except Exception:
+        except Exception as e:
+            logging.error(f"OpenAI attempt {attempt + 1} failed: {e}")
+            if reply:
+                logging.error(f"OpenAI raw reply: {reply}")
             time.sleep(2 ** attempt)
     raise RuntimeError("OpenAI request failed or returned invalid JSON")
 
@@ -133,6 +139,7 @@ def process_pdf(pdf_path: str) -> None:
         page_bytes = parse_pdf_page(pdf_path, page_num)
         mathpix_data = extract_mathpix_data(page_bytes)
         text = mathpix_data.get("text", "")
+        logging.info(f"Mathpix OCR text snippet: {text[:200]}")
         images = mathpix_data.get("images", []) or []
 
         image_map = {}
