@@ -127,7 +127,7 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
         "choice_D, correct_answer, domain, skill, difficulty, image_path. "
         "Use the provided image names when the text references graphs or tables. "
         "If domain, skill, or difficulty are missing, use 'Not specified'. "
-        "Do not fabricate information."\
+        "Do not fabricate information."
     )
     content = f"OCR TEXT:\n{text}\nIMAGE MAP:{json.dumps(image_map)}"
     messages = [
