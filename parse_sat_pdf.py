@@ -68,8 +68,8 @@ def extract_mathpix_data(image_bytes: bytes, retries: int = 3) -> Dict[str, Any]
             )
             if resp.status_code == 200:
                 return resp.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Mathpix attempt {attempt + 1} failed: {e}")
         time.sleep(2 ** attempt)
     raise RuntimeError(f"Mathpix request failed after {retries} attempts")
 
