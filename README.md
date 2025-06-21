@@ -1,82 +1,57 @@
-# SAT Question Processor
+# SAT PDF Parser
 
-This Streamlit app processes SAT questions from a PDF file using the Claude API and outputs the results as a CSV file.
+This project contains a command line tool for converting SAT practice PDFs into a structured CSV suitable for importing into Supabase.
 
-## Features
-
-- Upload PDF files containing SAT questions
-- Process questions using Claude API
-- Download results as a CSV file
-
-- Math-aware OCR for equations using the Mathpix API when available
-
+The script uses the Mathpix API to perform OCR on each page and OpenAI models to structure the results into question objects. Any images extracted from Mathpix are saved locally and referenced in the CSV output.
 
 ## Requirements
 
-- Python 3.7+
-- Streamlit
-- pdfplumber
-- PyMuPDF
+- Python 3.8+
+- openai
+- python-dotenv
 - pandas
-- pytesseract
 - requests
+- PyMuPDF
 - Pillow
-  
-Optional: set `MATHPIX_APP_ID` and `MATHPIX_APP_KEY` environment variables to enable Mathpix OCR for images containing equations.
-
-`pytesseract` requires the Tesseract OCR engine to be installed on your system.
 
 ## Installation
 
-1. Clone this repository:
-   ```
-   git clone https://github.com/yourusername/sat-question-processor.git
-   cd sat-question-processor
+1. Clone this repository and install dependencies:
+   ```bash
+   pip install -r requirements.txt
    ```
 
-2. Install the required packages:
-   ```
-   pip install -r requirements.txt
+2. Create a `.env` file in the project root containing your API keys:
+   ```env
+   OPENAI_API_KEY=sk-...
+   MATHPIX_APP_ID=your_app_id
+   MATHPIX_APP_KEY=your_app_key
    ```
 
 ## Usage
 
-1. Run the Streamlit app:
-   ```
-   streamlit run sat_question_processor.py
-   ```
+Run the parser and specify the input PDF and optional output CSV path:
 
-2. Open the provided URL in your web browser.
+```bash
+python parse_sat_pdf.py path/to/questions.pdf --csv parsed_questions.csv
+```
 
-3. Enter your Claude API key in the app.
+Images extracted from the PDF will be stored in the `images/` directory and the questions will be appended to the CSV file.
 
-4. Upload a PDF file containing SAT questions.
+## Output Format
 
-5. Click "Process PDF" to start processing.
-
-6. Once processing is complete, download the CSV file with the results.
-
-## Hosting the App
-
-To host the Streamlit app, you can use Streamlit Cloud or deploy it on platforms like Heroku or Google Cloud Platform. Here are instructions for using Streamlit Cloud:
-
-1. Push your code to a GitHub repository.
-
-2. Sign up for a free account at [streamlit.io](https://streamlit.io/).
-
-3. Create a new app and connect it to your GitHub repository.
-
-4. Select the main file (sat_question_processor.py) as the entry point.
-
-5. Deploy the app.
-
-Note: Make sure to set up environment variables for any sensitive information like API keys when deploying to a hosting platform.
-
-## For example:
-
-Input: https://drive.google.com/file/d/1gpgk1bFMxlFvjNb9sd6uIEUF89A9LM1h/view?usp=sharing
-
-Output: https://drive.google.com/file/d/1suAM4bmzMP3qoDdOFxdhTR91rvALV4L2/view?usp=sharing
+The CSV contains the following columns:
+- `question_id`
+- `question_text`
+- `choice_A`
+- `choice_B`
+- `choice_C`
+- `choice_D`
+- `correct_answer`
+- `domain`
+- `skill`
+- `difficulty`
+- `image_path`
 
 ## License
 

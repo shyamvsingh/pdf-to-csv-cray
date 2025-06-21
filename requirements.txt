@@ -1,7 +1,6 @@
-streamlit
-pdfplumber
+openai
+python-dotenv
 pandas
 requests
 PyMuPDF
-pytesseract
 Pillow

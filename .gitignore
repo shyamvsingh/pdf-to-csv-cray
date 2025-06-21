@@ -1,0 +1,4 @@
+images/
+parsed_questions.csv
+.env
+__pycache__/
