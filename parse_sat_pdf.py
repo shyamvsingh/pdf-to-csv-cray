@@ -4,6 +4,7 @@ import base64
 import json
 import time
 import uuid
+import re
 from typing import List, Dict, Any
 
 import fitz  # PyMuPDF
@@ -28,6 +29,24 @@ IMAGE_DIR = "images"
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+
+def clean_json_reply(reply: str) -> str:
+    """Extract JSON content from an OpenAI reply."""
+    if not reply:
+        return ""
+    cleaned = reply.strip()
+
+    # Prefer JSON inside fenced blocks
+    fence_match = re.search(r"```(?:json)?(.*?)```", cleaned, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        cleaned = fence_match.group(1)
+    else:
+        # Fall back to the first JSON object found
+        obj_match = re.search(r"{.*}", cleaned, re.DOTALL)
+        if obj_match:
+            cleaned = obj_match.group(0)
+    return cleaned.strip()
 
 
 def parse_pdf_page(pdf_path: str, page_num: int) -> bytes:
@@ -113,13 +132,16 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
                 temperature=0,
             )
             reply = resp.choices[0].message.content
-            data = json.loads(reply)
+            clean_reply = clean_json_reply(reply)
+            data = json.loads(clean_reply)
             if isinstance(data, dict) and isinstance(data.get("questions"), list):
                 return data["questions"]
         except Exception as e:
             logging.error(f"OpenAI attempt {attempt + 1} failed: {e}")
             if reply:
                 logging.error(f"OpenAI raw reply: {reply}")
+            if 'clean_reply' in locals():
+                logging.error(f"OpenAI cleaned reply: {clean_reply}")
             time.sleep(2 ** attempt)
     raise RuntimeError("OpenAI request failed or returned invalid JSON")
 
