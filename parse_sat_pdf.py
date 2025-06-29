@@ -125,11 +125,15 @@ def save_image(b64_data: str, question_id: str, suffix: str) -> str:
 def structure_question_with_openai(text: str, image_map: Dict[str, str], retries: int = 3) -> List[Dict[str, Any]]:
     """Use OpenAI to structure raw text into question objects."""
     prompt = (
-        "You are parsing SAT practice questions from OCR text. "
-        "Return data as JSON with a 'questions' array. Each question must have "
+        "You are parsing SAT practice questions from OCR text that may include LaTeX. "
+        "Return a JSON object with a 'questions' array. Each question must have "
         "fields: question_id, question_text, choice_A, choice_B, choice_C, "
         "choice_D, correct_answer, domain, skill, difficulty, image_path. "
-        "Use the provided image names when the text references graphs or tables. "
+        "Detect tables, graphs, systems of equations, linear functions, and geometry diagrams. "
+        "If the text includes a system of equations, a linear function, or other written function, "
+        "keep its LaTeX exactly as provided in question_text. "
+        "When questions reference graphs, tables, or geometry visuals, use the provided image name "
+        "for image_path or leave it blank for manual insertion. "
         "If domain, skill, or difficulty are missing, use 'Not specified'. "
         "Do not fabricate information."
     )
@@ -195,7 +199,7 @@ def process_pdf(pdf_path: str, csv_path: str = CSV_PATH) -> None:
             print(f"Processing page {page_num + 1}/{len(doc)}")
             page_bytes = parse_pdf_page(doc, page_num)
             mathpix_data = extract_mathpix_data(page_bytes)
-            text = mathpix_data.get("text", "")
+            text = mathpix_data.get("latex_styled") or mathpix_data.get("text", "")
             logging.info(f"Mathpix OCR text snippet: {text[:200]}")
             images = mathpix_data.get("images", []) or []
 
