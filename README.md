@@ -66,6 +66,10 @@ The CSV contains the following columns:
 - `difficulty`
 - `image_path`
 
+If a question has no answer choices, the `choice_A` through `choice_D` fields
+will contain the text `free response` so you can easily identify these
+questions when reviewing the CSV.
+
 ## License
 
 This project is licensed under the MIT License.
