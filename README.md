@@ -2,7 +2,7 @@
 
 This project contains a command line tool for converting SAT practice PDFs into a structured CSV suitable for importing into Supabase.
 
-The script uses the Mathpix API to perform OCR on each page and OpenAI models to structure the results into question objects. Any images extracted from Mathpix are saved locally and referenced in the CSV output.
+The script uses the Mathpix API to perform OCR on each page and OpenAI models to structure the results into question objects. Any images extracted from Mathpix are saved locally and referenced in the CSV output. Math formulas are preserved in LaTeX so that expressions like systems of equations render correctly on the front end.
 
 ## Requirements
 
@@ -55,6 +55,7 @@ Upload a PDF, click "Convert" and then use the provided download button to save 
 The CSV contains the following columns:
 - `question_id`
 - `question_text`
+- LaTeX may appear inside `question_text` for equations or functions.
 - `choice_A`
 - `choice_B`
 - `choice_C`
