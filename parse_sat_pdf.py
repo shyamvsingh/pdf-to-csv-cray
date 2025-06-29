@@ -6,7 +6,7 @@ import json5
 import time
 import uuid
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import fitz  # PyMuPDF
 import pandas as pd
@@ -122,7 +122,8 @@ def save_image(b64_data: str, question_id: str, suffix: str) -> str:
     return path
 
 
-def extract_pdf_content(pdf_path: str) -> (str, Dict[str, str]):
+def extract_pdf_content(pdf_path: str) -> Tuple[str, Dict[str, str]]:
+
     """Extract OCR text and images from an entire PDF."""
     doc = fitz.open(pdf_path)
     try:
