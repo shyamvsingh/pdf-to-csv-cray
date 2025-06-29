@@ -156,7 +156,9 @@ def structure_question_with_openai(text: str, image_map: Dict[str, str], retries
         "Use the identifier following 'Question ID' for question_id. Do not fabricate information. "
         "If the text references diagrams, graphs, tables, or other images, set image_path to 'needs image'. "
         "If any answer choice is an image, its value should be 'needs image'. "
-        "If domain, skill, or difficulty are missing, use 'Not specified'."
+        "If domain, skill, or difficulty are missing, use 'Not specified'. "
+        "If a question has no answer choices, mark it as a free response question "
+        "and set choice_A, choice_B, choice_C, and choice_D to 'free response'."
     )
     content = f"OCR TEXT:\n{text}\nIMAGE MAP:{json.dumps(image_map)}"
     messages = [
