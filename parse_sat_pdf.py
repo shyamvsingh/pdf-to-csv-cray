@@ -123,6 +123,7 @@ def save_image(b64_data: str, question_id: str, suffix: str) -> str:
 
 
 def extract_pdf_content(pdf_path: str) -> Tuple[str, Dict[str, str]]:
+
     """Extract OCR text and images from an entire PDF."""
     doc = fitz.open(pdf_path)
     try:
