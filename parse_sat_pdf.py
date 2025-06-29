@@ -6,7 +6,7 @@ import json5
 import time
 import uuid
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import fitz  # PyMuPDF
 import pandas as pd
@@ -122,20 +122,40 @@ def save_image(b64_data: str, question_id: str, suffix: str) -> str:
     return path
 
 
+def extract_pdf_content(pdf_path: str) -> Tuple[str, Dict[str, str]]:
+    """Extract OCR text and images from an entire PDF."""
+    doc = fitz.open(pdf_path)
+    try:
+        full_text = ""
+        image_map: Dict[str, str] = {}
+        for page_num in range(len(doc)):
+            page_bytes = parse_pdf_page(doc, page_num)
+            mathpix_data = extract_mathpix_data(page_bytes)
+            page_text = mathpix_data.get("latex_styled") or mathpix_data.get("text", "")
+            full_text += f"\n=== PAGE {page_num + 1} ===\n" + page_text
+
+            images = mathpix_data.get("images", []) or []
+            for idx, img in enumerate(images, start=1):
+                img_id = str(uuid.uuid4())[:8]
+                path = save_image(img.get("data", ""), img_id, f"p{page_num+1}_{idx}")
+                image_map[f"page{page_num+1}_image{idx}"] = path
+        return full_text, image_map
+    finally:
+        doc.close()
+
 def structure_question_with_openai(text: str, image_map: Dict[str, str], retries: int = 3) -> List[Dict[str, Any]]:
     """Use OpenAI to structure raw text into question objects."""
     prompt = (
-        "You are parsing SAT practice questions from OCR text that may include LaTeX. "
-        "Return a JSON object with a 'questions' array. Each question must have "
-        "fields: question_id, question_text, choice_A, choice_B, choice_C, "
-        "choice_D, correct_answer, domain, skill, difficulty, image_path. "
-        "Detect tables, graphs, systems of equations, linear functions, and geometry diagrams. "
-        "If the text includes a system of equations, a linear function, or other written function, "
-        "keep its LaTeX exactly as provided in question_text. "
-        "When questions reference graphs, tables, or geometry visuals, use the provided image name "
-        "for image_path or leave it blank for manual insertion. "
-        "If domain, skill, or difficulty are missing, use 'Not specified'. "
-        "Do not fabricate information."
+        "You are parsing SAT practice questions from OCR text. "
+        "Count each time the phrase 'Question ID' appears followed by an alphanumeric identifier. "
+        "Everything between one 'Question ID' line and the next belongs to the first identifier. "
+        "Return exactly that many questions as a JSON object with a 'questions' array. "
+        "Each question must include the fields: question_id, question_text, choice_A, choice_B, "
+        "choice_C, choice_D, correct_answer, domain, skill, difficulty, image_path. "
+        "Use the identifier following 'Question ID' for question_id. Do not fabricate information. "
+        "If the text references diagrams, graphs, tables, or other images, set image_path to 'needs image'. "
+        "If any answer choice is an image, its value should be 'needs image'. "
+        "If domain, skill, or difficulty are missing, use 'Not specified'."
     )
     content = f"OCR TEXT:\n{text}\nIMAGE MAP:{json.dumps(image_map)}"
     messages = [
@@ -193,29 +213,15 @@ def append_to_csv(
 
 
 def process_pdf(pdf_path: str, csv_path: str = CSV_PATH) -> None:
-    doc = fitz.open(pdf_path)
-    try:
-        for page_num in range(len(doc)):
-            print(f"Processing page {page_num + 1}/{len(doc)}")
-            page_bytes = parse_pdf_page(doc, page_num)
-            mathpix_data = extract_mathpix_data(page_bytes)
-            text = mathpix_data.get("latex_styled") or mathpix_data.get("text", "")
-            logging.info(f"Mathpix OCR text snippet: {text[:200]}")
-            images = mathpix_data.get("images", []) or []
+    text, image_map = extract_pdf_content(pdf_path)
+    logging.info(f"Combined OCR text length: {len(text)}")
 
-            image_map = {}
-            for idx, img in enumerate(images, start=1):
-                question_id = str(uuid.uuid4())[:8]
-                path = save_image(img.get("data", ""), question_id, f"img{idx}")
-                image_map[f"image{idx}"] = path
+    questions = structure_question_with_openai(text, image_map)
+    for q in questions:
+        if q.get("image_path") in image_map:
+            q["image_path"] = image_map[q["image_path"]]
 
-            questions = structure_question_with_openai(text, image_map)
-            for q in questions:
-                if q.get("image_path") in image_map:
-                    q["image_path"] = image_map[q["image_path"]]
-            append_to_csv(questions, csv_path)
-    finally:
-        doc.close()
+    append_to_csv(questions, csv_path)
 
 
 if __name__ == "__main__":
